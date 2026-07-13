@@ -6,7 +6,7 @@
  *
  * アプリケーション全体で使用する設定管理クラス。
  * 
- * 責 emergence (責務)
+ * 責務
  * ・デフォルト設定管理
  * ・設定の保存 / 読み込み（Storage連携）
  * ・設定バージョン管理とマイグレーション
@@ -21,7 +21,7 @@ import * as Utils from './settings-utils.js';
 
 /**
  * デフォルト設定の定義
- * アプリケーションの基本構造を定義する（外部からの汚染を防ぐためフリーズ）。
+ * アプリケーションの基本構造を定義する（トップレベル構造の変更を防ぐためフリーズ）。
  */
 export const DEFAULT_SETTINGS = Object.freeze({
     version: SETTINGS_VERSION,
@@ -74,22 +74,29 @@ export class Settings {
      * Storageから設定を読み込む。
      * データが存在しない場合はデフォルト設定を保存して初期化する（初回起動対策）。
      * 
-     * @returns {Promise<Object>} 読み込まれた設定オブジェクト
+     * @returns {Object} 読み込まれた設定オブジェクト
      */
-    async load() {
+    load() {
         try {
-            // Storageの現在の実装に基づき、短いキー"settings"を渡す
-            const stored = await this.#storage.get('settings');
+            // Storageの実装に合わせて同期処理に変更
+            const stored = this.#storage.get('settings');
 
             if (!stored) {
                 Logger.info('No settings found. Initializing with defaults.');
                 this.#settings = Utils.clone(DEFAULT_SETTINGS);
-                await this.save();
+                this.save();
                 return this.#settings;
             }
 
             // マイグレーションの実行
             this.#settings = this.migrate(stored);
+            
+            // 読み込んだデータのバージョンが古い、またはバージョン情報がない場合は最新化して保存
+            const currentVersion = Number.isInteger(stored.version) ? stored.version : 0;
+            if (currentVersion < SETTINGS_VERSION) {
+                this.save();
+            }
+
             return this.#settings;
         } catch (error) {
             Logger.error('Failed to load settings:', error);
@@ -102,9 +109,9 @@ export class Settings {
     /**
      * 現在の設定をStorageへ保存する。
      */
-    async save() {
+    save() {
         try {
-            await this.#storage.set('settings', this.#settings);
+            this.#storage.set('settings', this.#settings);
             Logger.info('Settings saved successfully');
         } catch (error) {
             Logger.error('Failed to save settings:', error);
@@ -125,7 +132,8 @@ export class Settings {
         // デフォルトの構造をベースに、読み込んだデータをディープマージして新規項目を補完
         let migrated = Utils.merge(DEFAULT_SETTINGS, loadedSettings);
 
-        const currentVersion = loadedSettings.version ?? 0;
+        // 数値型か厳密にチェックし、不正なデータや欠損はバージョン0として扱う
+        const currentVersion = Number.isInteger(loadedSettings.version) ? loadedSettings.version : 0;
 
         if (currentVersion < SETTINGS_VERSION) {
             Logger.info(`Migrating settings from v${currentVersion} to v${SETTINGS_VERSION}`);
@@ -154,11 +162,10 @@ export class Settings {
      * 
      * @param {string} path - ドット区切りの設定パス
      * @param {*} value - 設定する値
-     * @returns {Promise<void>}
      */
-    async set(path, value) {
+    set(path, value) {
         Utils.setPath(this.#settings, path, value);
-        await this.save();
+        this.save();
     }
 
     /**
@@ -185,22 +192,19 @@ export class Settings {
      * カテゴリが丸ごと消失するのを防ぎ、構造の整合性を維持する。
      * 
      * @param {Object} newSettings - 新しい設定オブジェクト
-     * @returns {Promise<void>}
      */
-    async replace(newSettings) {
+    replace(newSettings) {
         if (!newSettings || typeof newSettings !== 'object') return;
         this.#settings = Utils.merge(DEFAULT_SETTINGS, newSettings);
-        await this.save();
+        this.save();
     }
 
     /**
      * 設定をすべてデフォルト値にリセットする。
-     * 
-     * @returns {Promise<void>}
      */
-    async reset() {
+    reset() {
         this.#settings = Utils.clone(DEFAULT_SETTINGS);
-        await this.save();
+        this.save();
         Logger.info('Settings has been reset to defaults');
     }
 }
