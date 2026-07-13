@@ -2,7 +2,7 @@
  * ============================================================
  * YouTube Personal
  * File    : main.js
- * Version : 0.1.0
+ * Version : 0.1.1
  *
  * Tampermonkey 環境における唯一のエントリーポイント。
  * ブラウザのDOM構築タイミングを管理し、グローバルエラーを捕捉しながら
@@ -13,6 +13,7 @@
 
 import { App } from './core/app.js';
 import { Logger } from './core/logger.js';
+import { LayoutModule } from './modules/layout/layout-module.js';
 
 // グローバルSymbolレジストリを使用した一意な初期化フラグの定義
 const LAUNCH_FLAG = Symbol.for('__youtube_personal_initialized__');
@@ -41,9 +42,11 @@ const LAUNCH_FLAG = Symbol.for('__youtube_personal_initialized__');
             // インスタンスをスコープ変数に保持
             app = new App();
             
-            // 将来的に機能モジュール（LayoutModuleなど）を追加する場合は、
-            // ここで new して start([new LayoutModule(), ...]) のように流し込む
-            const success = await app.start();
+            // LayoutModuleのインスタンスを生成（Tracer Bulletの配置）
+            const layoutModule = new LayoutModule();
+            
+            // 配列形式でモジュールをアプリケーションのstartライフサイクルへ投入
+            const success = await app.start([layoutModule]);
             
             if (success) {
                 Logger.info('Main: Application successfully mounted to YouTube environment.');
