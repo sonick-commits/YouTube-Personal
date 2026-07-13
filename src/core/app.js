@@ -2,7 +2,7 @@
  * ============================================================
  * YouTube Personal
  * File    : app.js
- * Version : 0.1.0
+ * Version : 0.1.3
  *
  * アプリケーション全体のライフサイクルを一元管理するエントリーポイント（司令塔）。
  * 各種マネージャーやルーターの生成、依存関係に基づいた適切な順序での初期化、
@@ -69,7 +69,7 @@ export class App {
         Logger.info('App: Execution start procedure triggered.');
 
         try {
-            // 2. 設定データの非同期読み込み（将来の非同期Storage API拡張を見据えてawaitを完全適合）
+            // 2. 設定データの非同期読み込み
             await this.#settings.load();
             Logger.info('App: [Step 1/5] Settings loaded successfully.');
 
@@ -101,7 +101,6 @@ export class App {
 
         } catch (error) {
             Logger.error('App: Critical error occurred during startup sequence. Rolling back...', error);
-            // 起動中に失敗した場合は、中途半端な状態を残さず安全終了（クリーンアップ）させる
             await this.stop();
             return false;
         }
@@ -113,7 +112,6 @@ export class App {
      * @returns {Promise<void>}
      */
     async stop() {
-        // 二重停止判定を起動フラグのみでシンプルかつ確実にチェック
         if (!this.#isRunning) {
             Logger.info('App: Application is not active. Shutdown request ignored.');
             return;
@@ -122,7 +120,7 @@ export class App {
         Logger.info('App: Execution stop procedure triggered.');
 
         try {
-            // 1. Routerの停止とイベント購読の完全解除（リソース漏れを完全に防止）
+            // 1. Routerの停止とイベント購読の完全解除
             if (this.#router) {
                 this.#router.offRouteChange(this.#handleRouteChange);
                 this.#router.stop();
@@ -150,14 +148,49 @@ export class App {
     }
 
     /**
-     * ルート変更イベントをハンドリングし、ModuleManagerや各モジュールへ仲介する
+     * ルート変更イベントをハンドリングし、ModuleManagerからモジュールを取得して適切に振り分ける
      * 
      * @param {string} routeType - 判定されたルート識別子
      * @param {URL} urlObj - 遷移先のURLオブジェクト
      */
     #handleRouteChange = (routeType, urlObj) => {
         Logger.info(`App: Bridge received route change event -> ${routeType}`);
-        // 将来的に特定のルートに応じてモジュールの有効・無効を動的に切り替えるロジックをここに集約可能
+        
+        // 1. 対象のレイアウト制御モジュールを取得
+        const layoutModule = this.#moduleManager.get('layout');
+        if (!layoutModule) {
+            Logger.warn('App: LayoutModule not found in ModuleManager.');
+            return;
+        }
+
+        // 2. Commit #3 Part 6: routeType に応じた適切なハンドラへのルーティング振り分け
+        switch (routeType) {
+            case 'home':
+                layoutModule.onHomePage({
+                    routeType,
+                    url: urlObj
+                });
+                break;
+
+            case 'watch':
+                layoutModule.onWatchPage({
+                    routeType,
+                    url: urlObj
+                });
+                break;
+
+            case 'shorts':
+                layoutModule.onShortsPage({
+                    routeType,
+                    url: urlObj
+                });
+                break;
+
+            default:
+                // ハンドラが定義されていないルートに遷移した場合も、エラーにせず安全にロギング
+                Logger.info(`App: No module event handler registered for route "${routeType}".`);
+                break;
+        }
     };
 
     /**
