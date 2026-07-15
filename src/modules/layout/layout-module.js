@@ -2,7 +2,7 @@
  * ============================================================
  * YouTube Personal
  * File    : layout-module.js
- * Version : 0.4.1
+ * Version : 0.5.1
  *
  * YouTubeの画面レイアウト（サイドバー、ヘッダー、動画表示列数等）の
  * 制御を担当する機能モジュール。
@@ -34,6 +34,9 @@ export class LayoutModule extends ModuleBase {
     /** @type {string} */
     #videosPerRowStyleId;
 
+    /** @type {string} */
+    #compactLayoutStyleId;
+
     /**
      * コンストラクタ
      */
@@ -44,6 +47,7 @@ export class LayoutModule extends ModuleBase {
         this.#cssStyleId = 'layout-base';
         this.#fontSizeStyleId = 'layout-font-size';
         this.#videosPerRowStyleId = 'layout-videos-per-row';
+        this.#compactLayoutStyleId = 'layout-compact-layout'; // Commit #7: Compact Layout専用のCSS ID
         Logger.info('LayoutModule: Instance initialized.');
     }
 
@@ -53,7 +57,7 @@ export class LayoutModule extends ModuleBase {
      * 
      * @param {Object} context - 初期化コンテキスト
      * @param {Settings} context.settings - 設定マネージャーのインスタンス
-     * @param {CSSManager} context.cssManager - CSSマネージャーのインスタンス
+     * @param {CSSManager} context.cssManager - CSSマネージャー of インスタンス
      */
     init({ settings, cssManager } = {}) {
         this.#settings = settings;
@@ -96,6 +100,7 @@ export class LayoutModule extends ModuleBase {
         // 各レイアウト適用機能を内部から安全に順次呼び出し
         this.applyFontSize();
         this.applyVideosPerRow();
+        this.applyCompactLayout(); // Commit #7: ハブへ追加
     }
 
     /**
@@ -107,6 +112,7 @@ export class LayoutModule extends ModuleBase {
         // 各レイアウト解除機能を内部から安全に順次呼び出し（applyと対称性を維持）
         this.removeFontSize();
         this.removeVideosPerRow();
+        this.removeCompactLayout(); // Commit #7: ハブへ追加
 
         this.#cssManager.remove(this.#cssStyleId);
         Logger.info('LayoutModule: Layout CSS removed via remove().');
@@ -216,6 +222,83 @@ export class LayoutModule extends ModuleBase {
         return `
             ytd-rich-grid-renderer {
                 --ytd-rich-grid-items-per-row: ${count} !important;
+            }
+        `;
+    }
+
+    // ============================================================
+    // Compact Layout 機能エリア
+    // ============================================================
+
+    /**
+     * Settingsからコンパクトレイアウト設定を取得し、YouTubeにスタイルを適用する
+     */
+    applyCompactLayout() {
+        if (!this.#cssManager || !this.#settings) {
+            Logger.warn('LayoutModule: Cannot apply compact layout. Dependency component is missing.');
+            return;
+        }
+
+        const isCompact = this.#settings.get('layout.compactLayout');
+        if (isCompact !== true) {
+            this.removeCompactLayout();
+            Logger.info('LayoutModule: Compact layout setting is inactive or disabled.');
+            return;
+        }
+
+        this.removeCompactLayout();
+
+        const cssText = this.#generateCompactLayoutCss();
+        this.#cssManager.add(this.#compactLayoutStyleId, cssText);
+        Logger.info('LayoutModule: Compact layout applied successfully.');
+    }
+
+    /**
+     * 適用されているコンパクトレイアウト設定用スタイルを解除する
+     */
+    removeCompactLayout() {
+        if (this.#cssManager) {
+            this.#cssManager.remove(this.#compactLayoutStyleId);
+            Logger.info('LayoutModule: Compact layout CSS removed.');
+        }
+    }
+
+    /**
+     * ytd-browse 配下に制限し、純正レイアウトシステムを崩さない安全な
+     * コンパクトレイアウト用CSS文字列を生成する内部ユーティリティ
+     * 
+     * @returns {string} インジェクト用のCSS文字列
+     */
+    #generateCompactLayoutCss() {
+        return `
+            /* 1. グリッド全体の最上部パディングの微調整 */
+            ytd-browse ytd-rich-grid-renderer {
+                padding-top: 8px !important;
+            }
+
+            /* 2. 各動画カードコンテナの縦マージン縮小（左右マージンはレスポンシブ崩れ防止のため不干渉） */
+            ytd-browse ytd-rich-item-renderer {
+                margin-bottom: 12px !important;
+            }
+
+            /* 3. サムネイルとテキスト領域（詳細メタデータ）の間の余白を削減 */
+            ytd-browse ytd-rich-grid-media #details {
+                margin-top: 6px !important;
+            }
+
+            /* 4. 動画タイトル、チャンネル情報、再生回数行の間のマージンを削減 */
+            ytd-browse ytd-rich-grid-media #meta {
+                padding-right: 8px !important;
+            }
+            ytd-browse ytd-rich-grid-media #video-title-link {
+                margin-bottom: 4px !important;
+            }
+            ytd-browse ytd-rich-grid-media ytd-channel-name {
+                margin-top: 2px !important;
+                margin-bottom: 2px !important;
+            }
+            ytd-browse ytd-rich-grid-media #metadata-line {
+                margin-top: 2px !important;
             }
         `;
     }
