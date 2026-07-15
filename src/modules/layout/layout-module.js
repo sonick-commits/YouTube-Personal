@@ -2,9 +2,9 @@
  * ============================================================
  * YouTube Personal
  * File    : layout-module.js
- * Version : 0.3.1
+ * Version : 0.4.1
  *
- * YouTubeの画面レイアウト（サイドバー、ヘッダー、シアターモード等）の
+ * YouTubeの画面レイアウト（サイドバー、ヘッダー、動画表示列数等）の
  * 制御を担当する機能モジュール。
  * ============================================================
  */
@@ -31,6 +31,9 @@ export class LayoutModule extends ModuleBase {
     /** @type {string} */
     #fontSizeStyleId;
 
+    /** @type {string} */
+    #videosPerRowStyleId;
+
     /**
      * コンストラクタ
      */
@@ -39,7 +42,8 @@ export class LayoutModule extends ModuleBase {
         this.#settings = null;
         this.#cssManager = null;
         this.#cssStyleId = 'layout-base';
-        this.#fontSizeStyleId = 'layout-font-size'; // Font Size専用のCSS ID
+        this.#fontSizeStyleId = 'layout-font-size';
+        this.#videosPerRowStyleId = 'layout-videos-per-row';
         Logger.info('LayoutModule: Instance initialized.');
     }
 
@@ -48,7 +52,7 @@ export class LayoutModule extends ModuleBase {
      * App (ModuleManager) から一元管理された共有依存コンテキストを受け取る。
      * 
      * @param {Object} context - 初期化コンテキスト
-     * @param {Settings} context.settings - 設定マネージャー的インスタンス
+     * @param {Settings} context.settings - 設定マネージャーのインスタンス
      * @param {CSSManager} context.cssManager - CSSマネージャーのインスタンス
      */
     init({ settings, cssManager } = {}) {
@@ -57,7 +61,7 @@ export class LayoutModule extends ModuleBase {
         
         Logger.info('LayoutModule: init() accepted dependency injection successfully.');
         
-        // 初回起動時のレイアウトおよびフォントサイズ適用
+        // 初回起動時のレイアウト設定一斉適用
         this.apply();
     }
 
@@ -66,7 +70,6 @@ export class LayoutModule extends ModuleBase {
      */
     destroy() {
         Logger.info('LayoutModule: destroy() triggered clean up.');
-        // 解除処理のハブである remove() のみを呼び出すシンプルな構造を維持
         this.remove();
     }
 
@@ -92,6 +95,7 @@ export class LayoutModule extends ModuleBase {
 
         // 各レイアウト適用機能を内部から安全に順次呼び出し
         this.applyFontSize();
+        this.applyVideosPerRow();
     }
 
     /**
@@ -102,13 +106,14 @@ export class LayoutModule extends ModuleBase {
 
         // 各レイアウト解除機能を内部から安全に順次呼び出し（applyと対称性を維持）
         this.removeFontSize();
+        this.removeVideosPerRow();
 
         this.#cssManager.remove(this.#cssStyleId);
         Logger.info('LayoutModule: Layout CSS removed via remove().');
     }
 
     // ============================================================
-    // Commit #5: Font Size 機能実装エリア
+    // Font Size 機能エリア
     // ============================================================
 
     /**
@@ -120,14 +125,12 @@ export class LayoutModule extends ModuleBase {
             return;
         }
 
-        // Settingsから layout.fontSize を取得（未設定 null / undefined の場合は処理をスキップ）
         const fontSize = this.#settings.get('layout.fontSize');
         if (fontSize == null) {
             Logger.info('LayoutModule: Font size setting is empty. Skipped application.');
             return;
         }
 
-        // 安全な適用のための「remove() → add()」シーケンスの実行
         this.removeFontSize();
 
         const cssText = this.#generateFontSizeCss(fontSize);
@@ -148,14 +151,71 @@ export class LayoutModule extends ModuleBase {
     /**
      * 指定されたフォントサイズ値からCSS文字列を動的に生成する内部ユーティリティ
      * 
-     * @param {string} size - 設定されたフォントサイズ値 (例: '16px', '120%' 等、単位を含む文字列に統一)
+     * @param {string} size - 設定されたフォントサイズ値
      * @returns {string} インジェクト用のCSS文字列
      */
     #generateFontSizeCss(size) {
-        // YouTube全体の文字サイズを包括的に制御するためのスタイル定義（実機検証時の要確認対象）
         return `
             html, body, ytd-app {
                 font-size: ${size} !important;
+            }
+        `;
+    }
+
+    // ============================================================
+    // Videos Per Row 機能エリア
+    // ============================================================
+
+    /**
+     * Settingsから1行あたりの動画表示数設定を取得し、YouTubeにスタイルを適用する
+     */
+    applyVideosPerRow() {
+        if (!this.#cssManager || !this.#settings) {
+            Logger.warn('LayoutModule: Cannot apply videos per row. Dependency component is missing.');
+            return;
+        }
+
+        const count = this.#settings.get('layout.videosPerRow');
+        if (count == null) {
+            Logger.info('LayoutModule: Videos per row setting is empty. Skipped application.');
+            return;
+        }
+
+        // 厳密な数値型チェックによるバリデーションの強化
+        const numericCount = Number(count);
+        if (!Number.isInteger(numericCount) || numericCount <= 0) {
+            Logger.warn(`LayoutModule: Invalid videosPerRow value [${count}]. Skipped application.`);
+            return;
+        }
+
+        this.removeVideosPerRow();
+
+        const cssText = this.#generateVideosPerRowCss(numericCount);
+        this.#cssManager.add(this.#videosPerRowStyleId, cssText);
+        Logger.info(`LayoutModule: Videos per row [${numericCount}] applied successfully.`);
+    }
+
+    /**
+     * 適用されている動画表示列数設定用スタイルを解除する
+     */
+    removeVideosPerRow() {
+        if (this.#cssManager) {
+            this.#cssManager.remove(this.#videosPerRowStyleId);
+            Logger.info('LayoutModule: Videos per row CSS removed.');
+        }
+    }
+
+    /**
+     * 指定された列数からCSS文字列を動的に生成する内部ユーティリティ
+     * YouTube内部CSS変数を利用し、グリッドの表示列数を上書きする。
+     * 
+     * @param {number} count - 1行あたりの動画数（安全確認済みの整数）
+     * @returns {string} インジェクト用のCSS文字列
+     */
+    #generateVideosPerRowCss(count) {
+        return `
+            ytd-rich-grid-renderer {
+                --ytd-rich-grid-items-per-row: ${count} !important;
             }
         `;
     }
