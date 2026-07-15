@@ -1,206 +1,196 @@
 /**
  * ============================================================
  * YouTube Personal
- * File    : app.js
- * Version : 0.2.0
+ * File    : layout-module.js
+ * Version : 0.3.1
  *
- * アプリケーション全体のライフサイクルを一元管理するエントリーポイント（司令塔）。
- * 各種マネージャーやルーターの生成、依存関係に基づいた適切な順序での初期化、
- * 終了処理、および二重起動の防止を担当する。
- * 
- * 責務
- * ・コアコンポーネント（Settings, CSSManager, ModuleManager, Router）の統合
- * ・厳密な順序による起動（start）と停止（stop）の制御
- * ・多重起動の防止およびエラー発生時の安全な終了処理
+ * YouTubeの画面レイアウト（サイドバー、ヘッダー、シアターモード等）の
+ * 制御を担当する機能モジュール。
  * ============================================================
  */
 'use strict';
 
-import { Logger } from './logger.js';
-import { Settings } from './settings.js';
-import { ModuleManager } from './module-manager.js';
-import { CSSManager } from './css-manager.js';
-import { Router } from './router.js';
+import { ModuleBase } from '../../core/module-base.js';
+import { Logger } from '../../core/logger.js';
+import { Settings } from '../../core/settings.js';
+import { CSSManager } from '../../core/css-manager.js';
 
 /**
- * アプリケーションメインクラス
+ * レイアウト制御モジュール
  */
-export class App {
-    /** @type {boolean} */
-    #isRunning;
-
-    /** @type {Settings} */
+export class LayoutModule extends ModuleBase {
+    /** @type {Settings|null} */
     #settings;
 
-    /** @type {ModuleManager} */
-    #moduleManager;
-
-    /** @type {CSSManager} */
+    /** @type {CSSManager|null} */
     #cssManager;
 
-    /** @type {Router} */
-    #router;
+    /** @type {string} */
+    #cssStyleId;
+
+    /** @type {string} */
+    #fontSizeStyleId;
 
     /**
      * コンストラクタ
      */
     constructor() {
-        this.#isRunning = false;
-        this.#settings = new Settings();
-        this.#moduleManager = new ModuleManager();
-        this.#cssManager = new CSSManager();
-        this.#router = new Router();
-        Logger.info('App: Instance created.');
+        super('layout');
+        this.#settings = null;
+        this.#cssManager = null;
+        this.#cssStyleId = 'layout-base';
+        this.#fontSizeStyleId = 'layout-font-size'; // Font Size専用のCSS ID
+        Logger.info('LayoutModule: Instance initialized.');
     }
 
     /**
-     * アプリケーションを厳密な順序で安全に起動する
+     * モジュールの初期化処理
+     * App (ModuleManager) から一元管理された共有依存コンテキストを受け取る。
      * 
-     * @param {Array<Object>} modulesToRegister - 登録対象の初期モジュール配列（将来拡張用）
-     * @returns {Promise<boolean>} 起動が成功した場合はtrue、失敗した場合はfalse
+     * @param {Object} context - 初期化コンテキスト
+     * @param {Settings} context.settings - 設定マネージャー的インスタンス
+     * @param {CSSManager} context.cssManager - CSSマネージャーのインスタンス
      */
-    async start(modulesToRegister = []) {
-        // 1. 二重起動防止のチェック
-        if (this.#isRunning) {
-            Logger.warn('App: Application is already running. Double launch blocked.');
-            return false;
-        }
-
-        Logger.info('App: Execution start procedure triggered.');
-
-        try {
-            // 2. 設定データの非同期読み込み
-            await this.#settings.load();
-            Logger.info('App: [Step 1/5] Settings loaded successfully.');
-
-            // 3. CSSManagerの準備
-            Logger.info('App: [Step 2/5] CSSManager is ready.');
-
-            // 4. ModuleManagerへ各モジュールの登録
-            if (Array.isArray(modulesToRegister)) {
-                for (const module of modulesToRegister) {
-                    this.#moduleManager.register(module);
-                }
-            }
-            Logger.info('App: [Step 3/5] Base modules registration phase completed.');
-
-            // 5. RouterのURL遷移監視を開始
-            this.#router.start();
-            Logger.info('App: [Step 4/5] Router tracking activated.');
-
-            // 6. ルーターの変更イベントの購読（メソッド参照を渡してクリーンアップ可能に）
-            this.#router.onRouteChange(this.#handleRouteChange);
-
-            // 7. 登録された全モジュールの初期化を実行（コンテキストを注入）
-            await this.#moduleManager.initAll({
-                settings: this.#settings,
-                cssManager: this.#cssManager
-            });
-            Logger.info('App: [Step 5/5] All module lifecycles initialized with injected context.');
-
-            this.#isRunning = true;
-            Logger.info('App: Application started perfectly.');
-            return true;
-
-        } catch (error) {
-            Logger.error('App: Critical error occurred during startup sequence. Rolling back...', error);
-            await this.stop();
-            return false;
-        }
-    }
-
-    /**
-     * アプリケーションを安全かつ厳密な順序で停止し、リソースを完全に解放する
-     * 
-     * @returns {Promise<void>}
-     */
-    async stop() {
-        if (!this.#isRunning) {
-            Logger.info('App: Application is not active. Shutdown request ignored.');
-            return;
-        }
-
-        Logger.info('App: Execution stop procedure triggered.');
-
-        try {
-            // 1. Routerの停止とイベント購読の完全解除
-            if (this.#router) {
-                this.#router.offRouteChange(this.#handleRouteChange);
-                this.#router.stop();
-                Logger.info('App: [Shutdown 1/3] Router tracking stopped and listeners cleared.');
-            }
-
-            // 2. 全モジュールの破棄
-            if (this.#moduleManager) {
-                await this.#moduleManager.destroyAll();
-                Logger.info('App: [Shutdown 2/3] All registered modules destroyed.');
-            }
-
-            // 3. 注入された全スタイルのクリア
-            if (this.#cssManager) {
-                this.#cssManager.clear();
-                Logger.info('App: [Shutdown 3/3] Injected CSS structures cleared.');
-            }
-
-        } catch (shutdownError) {
-            Logger.error('App: Emergency! Error experienced during application teardown:', shutdownError);
-        } finally {
-            this.#isRunning = false;
-            Logger.info('App: Application terminated cleanly.');
-        }
-    }
-
-    /**
-     * ルート変更イベントをハンドリングし、ModuleManagerからモジュールを取得して適切に振り分ける
-     * 
-     * @param {string} routeType - 判定されたルート識別子
-     * @param {URL} urlObj - 遷移先のURLオブジェクト
-     */
-    #handleRouteChange = (routeType, urlObj) => {
-        Logger.info(`App: Bridge received route change event -> ${routeType}`);
+    init({ settings, cssManager } = {}) {
+        this.#settings = settings;
+        this.#cssManager = cssManager;
         
-        // 1. 対象のレイアウト制御モジュールを取得
-        const layoutModule = this.#moduleManager.get('layout');
-        if (!layoutModule) {
-            Logger.warn('App: LayoutModule not found in ModuleManager.');
+        Logger.info('LayoutModule: init() accepted dependency injection successfully.');
+        
+        // 初回起動時のレイアウトおよびフォントサイズ適用
+        this.apply();
+    }
+
+    /**
+     * モジュールの破棄処理
+     */
+    destroy() {
+        Logger.info('LayoutModule: destroy() triggered clean up.');
+        // 解除処理のハブである remove() のみを呼び出すシンプルな構造を維持
+        this.remove();
+    }
+
+    /**
+     * レイアウト変更の実機能を適用する内部メソッド（各機能のハブ）
+     */
+    apply() {
+        if (!this.#cssManager) {
+            Logger.warn('LayoutModule: Cannot apply styles. CSSManager is missing.');
             return;
         }
 
-        // 2. Commit #3 Part 6: routeType に応じた適切なハンドラへのルーティング振り分け
-        switch (routeType) {
-            case 'home':
-                layoutModule.onHomePage({
-                    routeType,
-                    url: urlObj
-                });
-                break;
+        // 疎通確認用ベースCSSのインジェクト
+        const testCss = `
+            body {
+                /* LayoutModule: CSSManager Connection Test Pass */
+                --yt-personal-layout-active: 1;
+            }
+        `;
 
-            case 'watch':
-                layoutModule.onWatchPage({
-                    routeType,
-                    url: urlObj
-                });
-                break;
+        this.#cssManager.add(this.#cssStyleId, testCss);
+        Logger.info('LayoutModule: Layout CSS applied via add().');
 
-            case 'shorts':
-                layoutModule.onShortsPage({
-                    routeType,
-                    url: urlObj
-                });
-                break;
-
-            default:
-                // ハンドラが定義されていないルートに遷移した場合も、エラーにせず安全にロギング
-                Logger.info(`App: No module event handler registered for route "${routeType}".`);
-                break;
-        }
-    };
+        // 各レイアウト適用機能を内部から安全に順次呼び出し
+        this.applyFontSize();
+    }
 
     /**
-     * 各マネージャーおよび設定クラスのインスタンスを取得するゲッター群
+     * 適用したすべてのレイアウト変更を解除・復元する内部メソッド（各解除機能のハブ）
      */
-    get settings() { return this.#settings; }
-    get moduleManager() { return this.#moduleManager; }
-    get cssManager() { return this.#cssManager; }
-    get router() { return this.#router; }
+    remove() {
+        if (!this.#cssManager) return;
+
+        // 各レイアウト解除機能を内部から安全に順次呼び出し（applyと対称性を維持）
+        this.removeFontSize();
+
+        this.#cssManager.remove(this.#cssStyleId);
+        Logger.info('LayoutModule: Layout CSS removed via remove().');
+    }
+
+    // ============================================================
+    // Commit #5: Font Size 機能実装エリア
+    // ============================================================
+
+    /**
+     * Settingsからフォントサイズ設定を取得し、YouTubeにスタイルを適用する
+     */
+    applyFontSize() {
+        if (!this.#cssManager || !this.#settings) {
+            Logger.warn('LayoutModule: Cannot apply font size. Dependency component is missing.');
+            return;
+        }
+
+        // Settingsから layout.fontSize を取得（未設定 null / undefined の場合は処理をスキップ）
+        const fontSize = this.#settings.get('layout.fontSize');
+        if (fontSize == null) {
+            Logger.info('LayoutModule: Font size setting is empty. Skipped application.');
+            return;
+        }
+
+        // 安全な適用のための「remove() → add()」シーケンスの実行
+        this.removeFontSize();
+
+        const cssText = this.#generateFontSizeCss(fontSize);
+        this.#cssManager.add(this.#fontSizeStyleId, cssText);
+        Logger.info(`LayoutModule: Font size [${fontSize}] applied successfully.`);
+    }
+
+    /**
+     * 適用されているフォントサイズ設定用スタイルを解除する
+     */
+    removeFontSize() {
+        if (this.#cssManager) {
+            this.#cssManager.remove(this.#fontSizeStyleId);
+            Logger.info('LayoutModule: Font size CSS removed.');
+        }
+    }
+
+    /**
+     * 指定されたフォントサイズ値からCSS文字列を動的に生成する内部ユーティリティ
+     * 
+     * @param {string} size - 設定されたフォントサイズ値 (例: '16px', '120%' 等、単位を含む文字列に統一)
+     * @returns {string} インジェクト用のCSS文字列
+     */
+    #generateFontSizeCss(size) {
+        // YouTube全体の文字サイズを包括的に制御するためのスタイル定義（実機検証時の要確認対象）
+        return `
+            html, body, ytd-app {
+                font-size: ${size} !important;
+            }
+        `;
+    }
+
+    // ============================================================
+    // Router連携用のページ遷移ハンドラ
+    // ============================================================
+
+    /**
+     * ホーム画面への遷移ハンドラ
+     * @param {Object} routeData - ルーティングデータ
+     */
+    onHomePage(routeData) {
+        Logger.info('LayoutModule: Handled HomePage navigation.', routeData);
+        // SPA navigation: re-apply layout styles
+        this.apply();
+    }
+
+    /**
+     * 動画視聴画面への遷移ハンドラ
+     * @param {Object} routeData - ルーティングデータ
+     */
+    onWatchPage(routeData) {
+        Logger.info('LayoutModule: Handled WatchPage navigation.', routeData);
+        // SPA navigation: re-apply layout styles
+        this.apply();
+    }
+
+    /**
+     * Shorts画面への遷移ハンドラ
+     * @param {Object} routeData - ルーティングデータ
+     */
+    onShortsPage(routeData) {
+        Logger.info('LayoutModule: Handled ShortsPage navigation.', routeData);
+        // SPA navigation: re-apply layout styles
+        this.apply();
+    }
 }
