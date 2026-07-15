@@ -2,7 +2,7 @@
  * ============================================================
  * YouTube Personal
  * File    : layout-module.js
- * Version : 0.7.2 (Commit #9 Part3: Videos Per Row Separation)
+ * Version : 0.7.3 (Commit #9 Part4: Compact Layout Separation)
  *
  * YouTubeの画面レイアウト（サイドバー、ヘッダー、動画表示列数等）の
  * 制御を担当する機能モジュール。
@@ -13,7 +13,8 @@
 import { ModuleBase } from '../../core/module-base.js';
 import { Logger } from '../../core/logger.js';
 import * as FontSize from './features/font-size.js';
-import * as VideosPerRow from './features/videos-per-row.js'; // Commit #9 Part3: 依存モジュールの追加
+import * as VideosPerRow from './features/videos-per-row.js';
+import * as CompactLayout from './features/compact-layout.js'; // Commit #9 Part4: 依存モジュールの追加
 
 /**
  * レイアウト制御モジュール（司令塔）
@@ -29,9 +30,6 @@ export class LayoutModule extends ModuleBase {
     #cssStyleId;
 
     /** @type {string} */
-    #compactLayoutStyleId;
-
-    /** @type {string} */
     #compactVideoPageStyleId;
 
     /**
@@ -42,7 +40,6 @@ export class LayoutModule extends ModuleBase {
         this.#settings = null;
         this.#cssManager = null;
         this.#cssStyleId = 'layout-base';
-        this.#compactLayoutStyleId = 'layout-compact-layout';
         this.#compactVideoPageStyleId = 'layout-compact-video-page-layout';
         Logger.info('LayoutModule: Instance initialized.');
     }
@@ -94,8 +91,8 @@ export class LayoutModule extends ModuleBase {
 
         // 各レイアウト適用機能を順次呼び出し
         FontSize.apply(this.#settings, this.#cssManager);
-        VideosPerRow.apply(this.#settings, this.#cssManager); // Commit #9 Part3: 分離したモジュールを呼び出し
-        this.applyCompactLayout();
+        VideosPerRow.apply(this.#settings, this.#cssManager);
+        CompactLayout.apply(this.#settings, this.#cssManager); // Commit #9 Part4: 分離したモジュールを呼び出し
         this.applyCompactVideoPageLayout();
     }
 
@@ -107,73 +104,12 @@ export class LayoutModule extends ModuleBase {
 
         // 各レイアウト解除機能を順次呼び出し
         FontSize.remove(this.#cssManager);
-        VideosPerRow.remove(this.#cssManager); // Commit #9 Part3: 分離したモジュールを呼び出し
-        this.removeCompactLayout();
+        VideosPerRow.remove(this.#cssManager);
+        CompactLayout.remove(this.#cssManager); // Commit #9 Part4: 分離したモジュールを呼び出し
         this.removeCompactVideoPageLayout();
 
         this.#cssManager.remove(this.#cssStyleId);
         Logger.info('LayoutModule: Layout Base CSS removed via remove().');
-    }
-
-    // ============================================================
-    // Compact Layout 機能エリア (一覧ページ用 ※次回以降分離予定)
-    // ============================================================
-
-    /**
-     * Settingsからコンパクトレイアウト設定を取得し、YouTubeにスタイルを適用する
-     */
-    applyCompactLayout() {
-        if (!this.#cssManager || !this.#settings) return;
-
-        const isCompact = this.#settings.get('layout.compactLayout');
-        if (isCompact !== true) {
-            this.removeCompactLayout();
-            return;
-        }
-
-        this.removeCompactLayout();
-
-        const cssText = this.#generateCompactLayoutCss();
-        this.#cssManager.add(this.#compactLayoutStyleId, cssText);
-    }
-
-    /**
-     * 適用されているコンパクトレイアウト設定用スタイルを解除する
-     */
-    removeCompactLayout() {
-        if (this.#cssManager) {
-            this.#cssManager.remove(this.#compactLayoutStyleId);
-        }
-    }
-
-    /**
-     * コンパクトレイアウト用CSS文字列を生成する内部ユーティリティ
-     */
-    #generateCompactLayoutCss() {
-        return `
-            ytd-browse ytd-rich-grid-renderer {
-                padding-top: 8px !important;
-            }
-            ytd-browse ytd-rich-item-renderer {
-                margin-bottom: 12px !important;
-            }
-            ytd-browse ytd-rich-grid-media #details {
-                margin-top: 6px !important;
-            }
-            ytd-browse ytd-rich-grid-media #meta {
-                padding-right: 8px !important;
-            }
-            ytd-browse ytd-rich-grid-media #video-title-link {
-                margin-bottom: 4px !important;
-            }
-            ytd-browse ytd-rich-grid-media ytd-channel-name {
-                margin-top: 2px !important;
-                margin-bottom: 2px !important;
-            }
-            ytd-browse ytd-rich-grid-media #metadata-line {
-                margin-top: 2px !important;
-            }
-        `;
     }
 
     // ============================================================
