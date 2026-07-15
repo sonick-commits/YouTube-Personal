@@ -2,7 +2,7 @@
  * ============================================================
  * YouTube Personal
  * File    : layout-module.js
- * Version : 0.3.0
+ * Version : 0.3.1
  *
  * YouTubeの画面レイアウト（サイドバー、ヘッダー、シアターモード等）の
  * 制御を担当する機能モジュール。
@@ -57,7 +57,7 @@ export class LayoutModule extends ModuleBase {
         
         Logger.info('LayoutModule: init() accepted dependency injection successfully.');
         
-        // 主機能および各レイアウト適用処理を一括実行
+        // 初回起動時のレイアウトおよびフォントサイズ適用
         this.apply();
     }
 
@@ -108,7 +108,7 @@ export class LayoutModule extends ModuleBase {
     }
 
     // ============================================================
-    // Commit #5 Part1: Font Size 機能実装エリア
+    // Commit #5: Font Size 機能実装エリア
     // ============================================================
 
     /**
@@ -161,18 +161,36 @@ export class LayoutModule extends ModuleBase {
     }
 
     // ============================================================
-    // Router連携用のページ遷移ハンドラ（スタブ）
+    // Router連携用のページ遷移ハンドラ
     // ============================================================
 
+    /**
+     * ホーム画面への遷移ハンドラ
+     * @param {Object} routeData - ルーティングデータ
+     */
     onHomePage(routeData) {
         Logger.info('LayoutModule: Handled HomePage navigation.', routeData);
+        // SPA navigation: re-apply layout styles
+        this.apply();
     }
 
+    /**
+     * 動画視聴画面への遷移ハンドラ
+     * @param {Object} routeData - ルーティングデータ
+     */
     onWatchPage(routeData) {
         Logger.info('LayoutModule: Handled WatchPage navigation.', routeData);
+        // SPA navigation: re-apply layout styles
+        this.apply();
     }
 
+    /**
+     * Shorts画面への遷移ハンドラ
+     * @param {Object} routeData - ルーティングデータ
+     */
     onShortsPage(routeData) {
         Logger.info('LayoutModule: Handled ShortsPage navigation.', routeData);
+        // SPA navigation: re-apply layout styles
+        this.apply();
     }
 }
