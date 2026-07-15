@@ -2,7 +2,7 @@
  * ============================================================
  * YouTube Personal
  * File    : layout-module.js
- * Version : 0.7.1 (Commit #9 Part2: Font Size Separation)
+ * Version : 0.7.2 (Commit #9 Part3: Videos Per Row Separation)
  *
  * YouTubeの画面レイアウト（サイドバー、ヘッダー、動画表示列数等）の
  * 制御を担当する機能モジュール。
@@ -12,7 +12,8 @@
 
 import { ModuleBase } from '../../core/module-base.js';
 import { Logger } from '../../core/logger.js';
-import * as FontSize from './features/font-size.js'; // Commit #9: FontSizeモジュールのインポート
+import * as FontSize from './features/font-size.js';
+import * as VideosPerRow from './features/videos-per-row.js'; // Commit #9 Part3: 依存モジュールの追加
 
 /**
  * レイアウト制御モジュール（司令塔）
@@ -28,9 +29,6 @@ export class LayoutModule extends ModuleBase {
     #cssStyleId;
 
     /** @type {string} */
-    #videosPerRowStyleId;
-
-    /** @type {string} */
     #compactLayoutStyleId;
 
     /** @type {string} */
@@ -44,7 +42,6 @@ export class LayoutModule extends ModuleBase {
         this.#settings = null;
         this.#cssManager = null;
         this.#cssStyleId = 'layout-base';
-        this.#videosPerRowStyleId = 'layout-videos-per-row';
         this.#compactLayoutStyleId = 'layout-compact-layout';
         this.#compactVideoPageStyleId = 'layout-compact-video-page-layout';
         Logger.info('LayoutModule: Instance initialized.');
@@ -96,8 +93,8 @@ export class LayoutModule extends ModuleBase {
         Logger.info('LayoutModule: Layout Base CSS applied via add().');
 
         // 各レイアウト適用機能を順次呼び出し
-        FontSize.apply(this.#settings, this.#cssManager); // Commit #9: 分離したモジュールを呼び出し
-        this.applyVideosPerRow();
+        FontSize.apply(this.#settings, this.#cssManager);
+        VideosPerRow.apply(this.#settings, this.#cssManager); // Commit #9 Part3: 分離したモジュールを呼び出し
         this.applyCompactLayout();
         this.applyCompactVideoPageLayout();
     }
@@ -109,55 +106,13 @@ export class LayoutModule extends ModuleBase {
         if (!this.#cssManager) return;
 
         // 各レイアウト解除機能を順次呼び出し
-        FontSize.remove(this.#cssManager); // Commit #9: 分離したモジュールを呼び出し
-        this.removeVideosPerRow();
+        FontSize.remove(this.#cssManager);
+        VideosPerRow.remove(this.#cssManager); // Commit #9 Part3: 分離したモジュールを呼び出し
         this.removeCompactLayout();
         this.removeCompactVideoPageLayout();
 
         this.#cssManager.remove(this.#cssStyleId);
         Logger.info('LayoutModule: Layout Base CSS removed via remove().');
-    }
-
-    // ============================================================
-    // Videos Per Row 機能エリア (※次回以降分離予定)
-    // ============================================================
-
-    /**
-     * Settingsから1行あたりの動画表示数設定を取得し、YouTubeにスタイルを適用する
-     */
-    applyVideosPerRow() {
-        if (!this.#cssManager || !this.#settings) return;
-
-        const count = this.#settings.get('layout.videosPerRow');
-        if (count == null) return;
-
-        const numericCount = Number(count);
-        if (!Number.isInteger(numericCount) || numericCount <= 0) return;
-
-        this.removeVideosPerRow();
-
-        const cssText = this.#generateVideosPerRowCss(numericCount);
-        this.#cssManager.add(this.#videosPerRowStyleId, cssText);
-    }
-
-    /**
-     * 適用されている動画表示列数設定用スタイルを解除する
-     */
-    removeVideosPerRow() {
-        if (this.#cssManager) {
-            this.#cssManager.remove(this.#videosPerRowStyleId);
-        }
-    }
-
-    /**
-     * 指定された列数からCSS文字列を動的に生成する内部ユーティリティ
-     */
-    #generateVideosPerRowCss(count) {
-        return `
-            ytd-rich-grid-renderer {
-                --ytd-rich-grid-items-per-row: ${count} !important;
-            }
-        `;
     }
 
     // ============================================================
