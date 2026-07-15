@@ -2,7 +2,7 @@
  * ============================================================
  * YouTube Personal
  * File    : module-manager.js
- * Version : 0.1.0
+ * Version : 0.2.0
  *
  * 各種機能モジュールのライフサイクル（登録、初期化、有効化、無効化、破棄）を
  * 一元管理するマネージャークラス。
@@ -20,7 +20,7 @@ import { Logger } from './logger.js';
 /**
  * @typedef {Object} Module
  * @property {string} name - モジュールの一意識別名
- * @property {function(): (void|Promise<void>)} init - モジュール初期化関数
+ * @property {function(Object=): (void|Promise<void>)} init - モジュール初期化関数（共通コンテキストを受け取る）
  * @property {function(): (void|Promise<void>)} destroy - モジュール破棄関数
  */
 
@@ -73,18 +73,20 @@ export class ModuleManager {
 
     /**
      * 登録されているすべてのモジュールを非同期で順次初期化する
+     * 上流（App）から渡された共有インフラ（context）を、各モジュールへリレーする。
      * 
+     * @param {Object} [context={}] - 依存関係をカプセル化した共通コンテキスト
      * @returns {Promise<void>}
      */
-    async initAll() {
-        Logger.info('ModuleManager: Start initializing all modules.');
+    async initAll(context = {}) {
+        Logger.info('ModuleManager: Start initializing all modules with context.');
         
         for (const [name, module] of this.#modules.entries()) {
             if (this.#activeStates.get(name)) continue;
 
             try {
-                // 将来的な各モジュールの非同期初期化を確実に待機
-                await module.init();
+                // 各モジュールの init() に context を渡して依存性を注入
+                await module.init(context);
                 this.#activeStates.set(name, true);
                 Logger.info(`ModuleManager: Module "${name}" initialized successfully.`);
             } catch (error) {
