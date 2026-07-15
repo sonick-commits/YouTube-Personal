@@ -2,7 +2,7 @@
  * ============================================================
  * YouTube Personal
  * File    : layout-module.js
- * Version : 0.5.1
+ * Version : 0.6.0
  *
  * YouTubeの画面レイアウト（サイドバー、ヘッダー、動画表示列数等）の
  * 制御を担当する機能モジュール。
@@ -37,6 +37,9 @@ export class LayoutModule extends ModuleBase {
     /** @type {string} */
     #compactLayoutStyleId;
 
+    /** @type {string} */
+    #compactVideoPageStyleId;
+
     /**
      * コンストラクタ
      */
@@ -47,7 +50,8 @@ export class LayoutModule extends ModuleBase {
         this.#cssStyleId = 'layout-base';
         this.#fontSizeStyleId = 'layout-font-size';
         this.#videosPerRowStyleId = 'layout-videos-per-row';
-        this.#compactLayoutStyleId = 'layout-compact-layout'; // Commit #7: Compact Layout専用のCSS ID
+        this.#compactLayoutStyleId = 'layout-compact-layout'; // Commit #7: Compact Layout (一覧用)
+        this.#compactVideoPageStyleId = 'layout-compact-video-page-layout'; // Commit #8: Compact Video Page Layout (視聴ページ用)
         Logger.info('LayoutModule: Instance initialized.');
     }
 
@@ -57,7 +61,7 @@ export class LayoutModule extends ModuleBase {
      * 
      * @param {Object} context - 初期化コンテキスト
      * @param {Settings} context.settings - 設定マネージャーのインスタンス
-     * @param {CSSManager} context.cssManager - CSSマネージャー of インスタンス
+     * @param {CSSManager} context.cssManager - CSSマネージャーのインスタンス
      */
     init({ settings, cssManager } = {}) {
         this.#settings = settings;
@@ -100,7 +104,8 @@ export class LayoutModule extends ModuleBase {
         // 各レイアウト適用機能を内部から安全に順次呼び出し
         this.applyFontSize();
         this.applyVideosPerRow();
-        this.applyCompactLayout(); // Commit #7: ハブへ追加
+        this.applyCompactLayout();
+        this.applyCompactVideoPageLayout(); // Commit #8: ハブへ追加
     }
 
     /**
@@ -112,7 +117,8 @@ export class LayoutModule extends ModuleBase {
         // 各レイアウト解除機能を内部から安全に順次呼び出し（applyと対称性を維持）
         this.removeFontSize();
         this.removeVideosPerRow();
-        this.removeCompactLayout(); // Commit #7: ハブへ追加
+        this.removeCompactLayout();
+        this.removeCompactVideoPageLayout(); // Commit #8: ハブへ追加
 
         this.#cssManager.remove(this.#cssStyleId);
         Logger.info('LayoutModule: Layout CSS removed via remove().');
@@ -227,7 +233,7 @@ export class LayoutModule extends ModuleBase {
     }
 
     // ============================================================
-    // Compact Layout 機能エリア
+    // Compact Layout 機能エリア (一覧ページ用)
     // ============================================================
 
     /**
@@ -299,6 +305,81 @@ export class LayoutModule extends ModuleBase {
             }
             ytd-browse ytd-rich-grid-media #metadata-line {
                 margin-top: 2px !important;
+            }
+        `;
+    }
+
+    // ============================================================
+    // Compact Video Page Layout 機能エリア (視聴ページ用)
+    // ============================================================
+
+    /**
+     * Settingsから視聴ページ向けコンパクトレイアウト設定を取得し、YouTubeにスタイルを適用する
+     */
+    applyCompactVideoPageLayout() {
+        if (!this.#cssManager || !this.#settings) {
+            Logger.warn('LayoutModule: Cannot apply compact video page layout. Dependency component is missing.');
+            return;
+        }
+
+        const isCompactWatch = this.#settings.get('layout.compactVideoPageLayout');
+        if (isCompactWatch !== true) {
+            this.removeCompactVideoPageLayout();
+            Logger.info('LayoutModule: Compact video page layout setting is inactive or disabled.');
+            return;
+        }
+
+        this.removeCompactVideoPageLayout();
+
+        const cssText = this.#generateCompactVideoPageLayoutCss();
+        this.#cssManager.add(this.#compactVideoPageStyleId, cssText);
+        Logger.info('LayoutModule: Compact video page layout applied successfully.');
+    }
+
+    /**
+     * 適用されている視聴ページ向けコンパクトレイアウト設定用スタイルを解除する
+     */
+    removeCompactVideoPageLayout() {
+        if (this.#cssManager) {
+            this.#cssManager.remove(this.#compactVideoPageStyleId);
+            Logger.info('LayoutModule: Compact video page layout CSS removed.');
+        }
+    }
+
+    /**
+     * ytd-watch-flexy 配下に厳格に制限し、プレイヤー自体のサイズ計算を崩さずに、
+     * 周辺メタデータや右カラムおすすめ動画の余白を詰めるCSSを生成する内部ユーティリティ
+     * 
+     * @returns {string} インジェクト用のCSS文字列
+     */
+    #generateCompactVideoPageLayoutCss() {
+        return `
+            /* 1. プレイヤーと下部コンテンツの間の不要な余白を縮小 */
+            ytd-watch-flexy {
+                --ytd-watch-flexy-space-below-player: 12px !important; /* 標準約24pxから安全に半減 */
+            }
+
+            /* 2. タイトルおよびチャンネル情報領域（ytd-watch-metadata）の上下余白の圧縮 */
+            ytd-watch-flexy ytd-watch-metadata {
+                margin-top: 8px !important;
+                margin-bottom: 8px !important;
+            }
+
+            /* 3. チャンネル名や登録ボタン・アクションボタンが並ぶメイン行の余白引き締め */
+            ytd-watch-flexy #top-row.ytd-watch-metadata {
+                margin-top: 4px !important;
+                padding-bottom: 4px !important;
+            }
+
+            /* 4. 概要欄コンテナの上下マージン削減（展開/非展開どちらの状態でも追従） */
+            ytd-watch-flexy #description.ytd-watch-metadata {
+                margin-top: 8px !important;
+                margin-bottom: 8px !important;
+            }
+
+            /* 5. 右側おすすめ動画（ytd-compact-video-renderer）の間隔を詰める（表示密度向上） */
+            ytd-watch-flexy #secondary ytd-compact-video-renderer {
+                margin-bottom: 8px !important;
             }
         `;
     }
