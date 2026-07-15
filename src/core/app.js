@@ -2,7 +2,7 @@
  * ============================================================
  * YouTube Personal
  * File    : app.js
- * Version : 0.1.3
+ * Version : 0.2.0
  *
  * アプリケーション全体のライフサイクルを一元管理するエントリーポイント（司令塔）。
  * 各種マネージャーやルーターの生成、依存関係に基づいた適切な順序での初期化、
@@ -91,9 +91,12 @@ export class App {
             // 6. ルーターの変更イベントの購読（メソッド参照を渡してクリーンアップ可能に）
             this.#router.onRouteChange(this.#handleRouteChange);
 
-            // 7. 登録された全モジュールの初期化を実行
-            await this.#moduleManager.initAll();
-            Logger.info('App: [Step 5/5] All module lifecycles initialized.');
+            // 7. 登録された全モジュールの初期化を実行（コンテキストを注入）
+            await this.#moduleManager.initAll({
+                settings: this.#settings,
+                cssManager: this.#cssManager
+            });
+            Logger.info('App: [Step 5/5] All module lifecycles initialized with injected context.');
 
             this.#isRunning = true;
             Logger.info('App: Application started perfectly.');
