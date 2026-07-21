@@ -2,7 +2,7 @@
  * ============================================================
  * YouTube Personal
  * File    : layout-module.js
- * Version : 0.7.3 (Commit #9 Part4: Compact Layout Separation)
+ * Version : 0.8.0 (Commit #10: FEATURES Array Management)
  *
  * YouTubeの画面レイアウト（サイドバー、ヘッダー、動画表示列数等）の
  * 制御を担当する機能モジュール。
@@ -14,7 +14,19 @@ import { ModuleBase } from '../../core/module-base.js';
 import { Logger } from '../../core/logger.js';
 import * as FontSize from './features/font-size.js';
 import * as VideosPerRow from './features/videos-per-row.js';
-import * as CompactLayout from './features/compact-layout.js'; // Commit #9 Part4: 依存モジュールの追加
+import * as CompactLayout from './features/compact-layout.js';
+import * as CompactVideoLayout from './features/compact-video-layout.js';
+
+/**
+ * 登録されているすべてのレイアウト機能モジュールの一覧
+ * 新しいレイアウト機能を追加する場合は、この配列にモジュールを追加するだけで完了します。
+ */
+const FEATURES = [
+    FontSize,
+    VideosPerRow,
+    CompactLayout,
+    CompactVideoLayout,
+];
 
 /**
  * レイアウト制御モジュール（司令塔）
@@ -29,9 +41,6 @@ export class LayoutModule extends ModuleBase {
     /** @type {string} */
     #cssStyleId;
 
-    /** @type {string} */
-    #compactVideoPageStyleId;
-
     /**
      * コンストラクタ
      */
@@ -40,7 +49,6 @@ export class LayoutModule extends ModuleBase {
         this.#settings = null;
         this.#cssManager = null;
         this.#cssStyleId = 'layout-base';
-        this.#compactVideoPageStyleId = 'layout-compact-video-page-layout';
         Logger.info('LayoutModule: Instance initialized.');
     }
 
@@ -78,7 +86,7 @@ export class LayoutModule extends ModuleBase {
             return;
         }
 
-        // 疎通確認用ベースCSSのインジェクト
+        // 疎通確認用ベースCSSのインジェクト（※将来的に共通CSSへ統合または削除予定）
         const testCss = `
             body {
                 /* LayoutModule: CSSManager Connection Test Pass */
@@ -89,11 +97,10 @@ export class LayoutModule extends ModuleBase {
         this.#cssManager.add(this.#cssStyleId, testCss);
         Logger.info('LayoutModule: Layout Base CSS applied via add().');
 
-        // 各レイアウト適用機能を順次呼び出し
-        FontSize.apply(this.#settings, this.#cssManager);
-        VideosPerRow.apply(this.#settings, this.#cssManager);
-        CompactLayout.apply(this.#settings, this.#cssManager); // Commit #9 Part4: 分離したモジュールを呼び出し
-        this.applyCompactVideoPageLayout();
+        // 登録されている全Featureの適用処理を順番に実行
+        for (const feature of FEATURES) {
+            feature.apply(this.#settings, this.#cssManager);
+        }
     }
 
     /**
@@ -102,71 +109,13 @@ export class LayoutModule extends ModuleBase {
     remove() {
         if (!this.#cssManager) return;
 
-        // 各レイアウト解除機能を順次呼び出し
-        FontSize.remove(this.#cssManager);
-        VideosPerRow.remove(this.#cssManager);
-        CompactLayout.remove(this.#cssManager); // Commit #9 Part4: 分離したモジュールを呼び出し
-        this.removeCompactVideoPageLayout();
+        // 登録されている全Featureの解除処理を順番に実行
+        for (const feature of FEATURES) {
+            feature.remove(this.#cssManager);
+        }
 
         this.#cssManager.remove(this.#cssStyleId);
         Logger.info('LayoutModule: Layout Base CSS removed via remove().');
-    }
-
-    // ============================================================
-    // Compact Video Page Layout 機能エリア (視聴ページ用 ※次回以降分離予定)
-    // ============================================================
-
-    /**
-     * Settingsから視聴ページ向けコンパクトレイアウト設定を取得し、YouTubeにスタイルを適用する
-     */
-    applyCompactVideoPageLayout() {
-        if (!this.#cssManager || !this.#settings) return;
-
-        const isCompactWatch = this.#settings.get('layout.compactVideoPageLayout');
-        if (isCompactWatch !== true) {
-            this.removeCompactVideoPageLayout();
-            return;
-        }
-
-        this.removeCompactVideoPageLayout();
-
-        const cssText = this.#generateCompactVideoPageLayoutCss();
-        this.#cssManager.add(this.#compactVideoPageStyleId, cssText);
-    }
-
-    /**
-     * 適用されている視聴ページ向けコンパクトレイアウト設定用スタイルを解除する
-     */
-    removeCompactVideoPageLayout() {
-        if (this.#cssManager) {
-            this.#cssManager.remove(this.#compactVideoPageStyleId);
-        }
-    }
-
-    /**
-     * 視聴ページコンパクトレイアウト用CSS文字列を生成する内部ユーティリティ
-     */
-    #generateCompactVideoPageLayoutCss() {
-        return `
-            ytd-watch-flexy {
-                --ytd-watch-flexy-space-below-player: 12px !important;
-            }
-            ytd-watch-flexy ytd-watch-metadata {
-                margin-top: 8px !important;
-                margin-bottom: 8px !important;
-            }
-            ytd-watch-flexy #top-row.ytd-watch-metadata {
-                margin-top: 4px !important;
-                padding-bottom: 4px !important;
-            }
-            ytd-watch-flexy #description.ytd-watch-metadata {
-                margin-top: 8px !important;
-                margin-bottom: 8px !important;
-            }
-            ytd-watch-flexy #secondary ytd-compact-video-renderer {
-                margin-bottom: 8px !important;
-            }
-        `;
     }
 
     // ============================================================
